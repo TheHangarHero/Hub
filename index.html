@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fault Isolation Manual (FIM)</title>
+    
+    <!-- Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      const SUPABASE_URL = 'https://jdzxcubjppcnhlpaufev.supabase.co';
+      const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkenhjdWJqcHBjbmhscGF1ZmV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4NDg5NjcsImV4cCI6MjEwMzQyNDk2N30.QC0dmpseIfE_vB6C1tgwOJigCGlGl-dG7IXI_DT_IYI'; 
+      
+      const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    </script>
+
+    <style>
+        :root {
+            /* Blueish Black Theme */
+            --bg-base: #0a0e14;
+            --bg-surface: #121820;
+            --bg-panel: #1a222d;
+            --border-color: #243040;
+            --text-main: #e6edf3;
+            --text-muted: #8b949e;
+            --accent-blue: #38bdf8;
+            
+            /* Priority / Severity Colors */
+            --sev-red: #f87171;
+            --sev-amber: #fbbf24;
+            --sev-cyan: #38bdf8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-size: 13px;
+        }
+
+        /* Top Header */
+        header {
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border-color);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .header-title { font-weight: 700; font-size: 15px; color: #fff; letter-spacing: 0.5px; }
+
+        .platform-select {
+            background-color: var(--bg-panel);
+            color: #fff;
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .global-search {
+            flex: 1;
+            max-width: 450px;
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            outline: none;
+        }
+
+        .btn-add {
+            background-color: #0284c7;
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-add:hover { background-color: #0369a1; }
+
+        .btn-edit {
+            background-color: #2563eb;
+            color: #fff;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            flex: 1;
+        }
+        .btn-edit:hover { background-color: #1d4ed8; }
+
+        .btn-delete {
+            background-color: #dc2626;
+            color: #fff;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-delete:hover { background-color: #b91c1c; }
+
+        /* Main Workspace Layout */
+        .workspace {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Left Sidebar - Dynamic Filters */
+        .sidebar {
+            width: 260px;
+            background-color: var(--bg-surface);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 12px;
+            overflow-y: auto;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .filter-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+        .ata-search-input {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            color: #fff;
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            outline: none;
+            margin-bottom: 2px;
+        }
+
+        .filter-box {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            max-height: 160px;
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .filter-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            color: var(--text-main);
+            font-size: 12px;
+        }
+
+        /* Center Content - Data Grid */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: var(--bg-base);
+        }
+
+        .grid-header {
+            padding: 10px 16px;
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 700;
+            color: var(--text-muted);
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+
+        .table-container {
+            flex: 1;
+            overflow: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background-color: var(--bg-panel);
+            color: var(--text-muted);
+            font-weight: 600;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-main);
+            white-space: nowrap;
+        }
+
+        tr:hover { background-color: var(--bg-panel); cursor: pointer; }
+        tr.selected { background-color: #1c2735; border-left: 3px solid var(--accent-blue); }
+
+        /* Custom Rounded Pill Badges */
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        
+        .badge-critical, .badge-red { 
+            background-color: rgba(248, 113, 113, 0.12); 
+            color: #f87171; 
+            border: 1.5px solid #f87171; 
+        }
+        
+        .badge-caution, .badge-amber { 
+            background-color: rgba(251, 191, 36, 0.12); 
+            color: #fbbf24; 
+            border: 1.5px solid #fbbf24; 
+        }
+        
+        .badge-advisory, .badge-cyan { 
+            background-color: rgba(56, 189, 248, 0.12); 
+            color: #38bdf8; 
+            border: 1.5px solid #38bdf8; 
+        }
+        
+        .badge-na { 
+            background-color: rgba(139, 148, 158, 0.12); 
+            color: var(--text-muted); 
+            border: 1.5px solid var(--border-color); 
+        }
+
+        /* Right Panel - Instant FIM Task / Inspection Panel */
+        .task-panel {
+            width: 340px;
+            background-color: var(--bg-surface);
+            border-left: 1px solid var(--border-color);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .task-header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .task-title { font-size: 14px; font-weight: 700; color: #fff; }
+        .task-sub { font-size: 11px; color: var(--text-muted); }
+
+        .section-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: var(--accent-blue);
+            margin-bottom: 6px;
+        }
+
+        .task-box {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+        }
+
+        /* Media Attachments Gallery */
+        .media-gallery {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .media-thumb {
+            width: 100%;
+            height: 90px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background-color: var(--bg-panel);
+            cursor: pointer;
+        }
+
+        .media-thumb:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .action-bar {
+            display: none;
+            gap: 8px;
+            margin-top: auto;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* Modal styling */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            padding: 24px; 
+            border-radius: 8px;
+            width: 540px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 14px;
+            max-height: 90vh; 
+            overflow-y: auto;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .modal-content label { 
+            font-size: 11px; 
+            text-transform: uppercase; 
+            color: var(--text-muted); 
+            font-weight: 700; 
+            letter-spacing: 0.5px;
+        }
+
+        .modal-content input[type="text"], 
+        .modal-content select {
+            background: var(--bg-panel); 
+            border: 1px solid var(--border-color);
+            color: #fff; 
+            padding: 8px 10px; 
+            border-radius: 4px; 
+            outline: none;
+            font-size: 12px;
+        }
+
+        .modal-content textarea {
+            background: var(--bg-panel); 
+            border: 1px solid var(--border-color);
+            color: #fff; 
+            padding: 10px; 
+            border-radius: 4px; 
+            outline: none;
+            font-size: 12px;
+            min-height: 75px;
+            resize: vertical;
+            line-height: 1.4;
+        }
+
+        .modal-content input:focus, 
+        .modal-content select:focus, 
+        .modal-content textarea:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .file-input-wrapper {
+            background: var(--bg-panel);
+            border: 1px dashed var(--border-color);
+            padding: 14px;
+            border-radius: 4px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .file-input-wrapper:hover { border-color: var(--accent-blue); }
+
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
+        /* Lightbox Modal */
+        .lightbox-content {
+            max-width: 80vw;
+            max-height: 80vh;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="header-title">FIM CROSS-REFERENCE</span>
+            <select id="platformSelect" class="platform-select" onchange="applyFilters()">
+                <option value="Gulfstream GIII">Gulfstream GIII</option>
+                <option value="Gulfstream GIV">Gulfstream GIV</option>
+                <option value="Gulfstream G400">Gulfstream G400</option>
+                <option value="Gulfstream G450">Gulfstream G450</option>
+                <option value="Gulfstream GV" selected>Gulfstream GV</option>
+                <option value="Gulfstream G500">Gulfstream G500</option>
+                <option value="Gulfstream G550">Gulfstream G550</option>
+                <option value="Gulfstream G650">Gulfstream G650</option>
+                <option value="Bombardier Global 6000">Global 6000</option>
+            </select>
+        </div>
+
+        <input type="text" id="globalSearch" class="global-search" placeholder="Search Fault Name, Source, Code, ATA, REF, or Symptom..." oninput="applyFilters()">
+
+        <button class="btn-add" onclick="openAddModal()">+ Add FIM Entry</button>
+    </header>
+
+    <div class="workspace">
+
+        <div class="sidebar">
+            <div class="filter-group">
+                <span class="filter-title">ATA Chapter Filter</span>
+                <input type="text" id="ataSearchInput" class="ata-search-input" placeholder="Type chapter or title..." oninput="filterAtaList()">
+                <div id="ataFilterBox" class="filter-box"></div>
+            </div>
+
+            <div class="filter-group">
+                <span class="filter-title">Priority Filter</span>
+                <div class="filter-box">
+                    <label class="filter-item">
+                        <input type="checkbox" value="Warning" onchange="applyFilters()"> 
+                        <span class="badge badge-critical">Warning (RED)</span>
+                    </label>
+                    <label class="filter-item">
+                        <input type="checkbox" value="Caution" onchange="applyFilters()"> 
+                        <span class="badge badge-caution">Caution (AMBER)</span>
+                    </label>
+                    <label class="filter-item">
+                        <input type="checkbox" value="Advisory" onchange="applyFilters()"> 
+                        <span class="badge badge-advisory">Advisory (CYAN)</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="grid-header">PRIMARY FAULT CROSS-REFERENCE GRID</div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Priority</th>
+                            <th>Source</th>
+                            <th>ATA</th>
+                            <th>Fault Code</th>
+                            <th>Fault Name</th>
+                            <th>Observed Symptom</th>
+                        </tr>
+                    </thead>
+                    <tbody id="faultTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="task-panel">
+            <div class="task-header">
+                <div id="taskAta" class="task-title">Select a Fault</div>
+                <div id="taskTitle" class="task-sub">Click any row in the cross-reference grid to load instructions.</div>
+                <div id="taskRef" style="font-size: 11px; color: var(--accent-blue); margin-top: 4px; font-weight: 600;">--</div>
+            </div>
+
+            <div>
+                <div class="section-title">Target LRU</div>
+                <div id="taskLru" class="task-box">--</div>
+            </div>
+
+            <div>
+                <div class="section-title">Description / Notes</div>
+                <div id="taskDescription" class="task-box">--</div>
+            </div>
+
+            <div>
+                <div class="section-title">Possible Causes</div>
+                <div id="taskCauses" class="task-box">--</div>
+            </div>
+
+            <div>
+                <div class="section-title">Isolation Steps</div>
+                <div id="taskIsolation" class="task-box">--</div>
+            </div>
+
+            <div>
+                <div class="section-title">Corrective Action</div>
+                <div id="taskAction" class="task-box">--</div>
+            </div>
+
+            <div>
+                <div class="section-title">Photos & Videos</div>
+                <div id="taskMediaGallery" class="media-gallery">
+                    <div style="grid-column: span 2; color: var(--text-muted); font-size: 11px;">No attachments logged.</div>
+                </div>
+            </div>
+
+            <div id="actionBar" class="action-bar">
+                <button class="btn-edit" onclick="openEditModal()">Edit Entry</button>
+                <button class="btn-delete" onclick="deleteEntry()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="entryModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalHeading" style="font-size: 16px; color: #fff;">Add New Fault Entry</h3>
+            <input type="hidden" id="editEntryId">
+
+            <div class="form-group">
+                <label>Platform</label>
+                <select id="formPlatform">
+                    <option value="Gulfstream GIII">Gulfstream GIII</option>
+                    <option value="Gulfstream GIV">Gulfstream GIV</option>
+                    <option value="Gulfstream G400">Gulfstream G400</option>
+                    <option value="Gulfstream G450">Gulfstream G450</option>
+                    <option value="Gulfstream GV">Gulfstream GV</option>
+                    <option value="Gulfstream G500">Gulfstream G500</option>
+                    <option value="Gulfstream G550">Gulfstream G550</option>
+                    <option value="Gulfstream G650">Gulfstream G650</option>
+                    <option value="Bombardier Global 6000">Global 6000</option>
+                </select>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Priority</label>
+                    <select id="formPriority">
+                        <option value="" selected>-- Select Priority --</option>
+                        <option value="Warning">Warning (RED)</option>
+                        <option value="Caution">Caution (AMBER)</option>
+                        <option value="Advisory">Advisory (CYAN)</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Source</label>
+                    <input type="text" id="formSource" placeholder="e.g. CAS, CMC, MDAU, Observed" list="sourceSuggestions">
+                    <datalist id="sourceSuggestions">
+                        <option value="CAS"></option>
+                        <option value="CMC"></option>
+                        <option value="MDAU"></option>
+                        <option value="Observed"></option>
+                    </datalist>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                <div class="form-group" style="flex: 1;">
+                    <label>ATA Chapter</label>
+                    <select id="formAta">
+                        <option value="" selected>-- Select Chapter --</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Fault Code</label>
+                    <input type="text" id="formCode" placeholder="e.g. FC-2910-01 or GEN 1 ADV">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Fault Name</label>
+                    <input type="text" id="formCas" placeholder="e.g. HYD PRESS LOW">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Document REF</label>
+                    <input type="text" id="formRef" placeholder="e.g. FIM 29-10-01 / AMM 29-11-00">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Target LRU</label>
+                <input type="text" id="formLru" placeholder="e.g. Hydraulic Motor Pump 1">
+            </div>
+
+            <div class="form-group">
+                <label>Observed Symptom</label>
+                <input type="text" id="formSymptom" placeholder="e.g. Whining noise from tail section">
+            </div>
+
+            <div class="form-group">
+                <label>Description / Notes</label>
+                <textarea id="formDescription" placeholder="e.g. Additional context, system operational notes, or field observations..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Possible Causes</label>
+                <textarea id="formCauses" placeholder="e.g. 1. Low reservoir fluid level&#10;2. Defective pressure transducer&#10;3. Wiring harness short"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Isolation Steps</label>
+                <textarea id="formIsolation" placeholder="e.g. 1. Check J2 Pin A1 to GND: 28 VDC&#10;2. Check Pin B2 continuity: < 0.5 Ohms&#10;3. Perform built-in test (BIT)"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Corrective Action</label>
+                <textarea id="formAction" placeholder="e.g. Inspect fluid level. If nominal, replace Hydraulic Pump Relay P/N 4092-A2."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Upload Media (Photos & Videos)</label>
+                <div class="file-input-wrapper" onclick="document.getElementById('formMediaFiles').click()">
+                    <span style="font-size: 11px; color: var(--text-muted);">Click to attach Photos or Short Videos (.png, .jpg, .mp4)</span>
+                    <input type="file" id="formMediaFiles" multiple accept="image/*,video/*" style="display:none;" onchange="handleFileSelect(event)">
+                </div>
+                <div id="mediaPreviewContainer" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button onclick="closeModal()" style="background:transparent; color:#fff; border:none; cursor:pointer; padding: 6px 12px;">Cancel</button>
+                <button class="btn-add" onclick="saveEntry()">Save Entry</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="lightboxModal" class="modal" onclick="closeLightbox()">
+        <div id="lightboxContainer"></div>
+    </div>
+
+    <!-- Main Logic Script -->
+    <script>
+        const ataChapters = [
+            "21 Air Conditioning", "22 Auto Flight", "23 Communications", 
+            "24 Electrical Power", "25 Equipment/Furnishings", "26 Fire Protection", 
+            "27 Flight Controls", "28 Fuel", "29 Hydraulic Power", 
+            "30 Ice & Rain Protection", "31 Indicating/Recording", "32 Landing Gear", 
+            "33 Lights", "34 Navigation", "35 Oxygen", "36 Pneumatic", 
+            "49 Auxiliary Power Unit", "52 Doors", "71 Power Plant", "73 Engine Fuel & Control"
+        ];
+
+        let initialData = [
+            { id: 1, platform: "Gulfstream GV", priority: "Warning", source: "CAS", ata: "29", code: "—", cas: "HYD PRESS LOW", ref: "FIM 29-10-01", symptom: "Whining noise from tail section", lru: "Hydraulic Pump 1", description: "Audible whining noticed on ground run prior to flight. Pressure gauge fluctuation observed.", causes: "1. Low fluid level\n2. Relay failure", isolation: "1. Pin A1 to GND: 28 VDC (Ref: J2)\n2. Pin B2 Continuity: < 0.5 Ohms", action: "Inspect fluid level. If nominal, replace Hydraulic Pump Relay P/N 4092-A2.", media: [] },
+            { id: 2, platform: "Gulfstream GV", priority: "Caution", source: "CAS", ata: "29", code: "—", cas: "HYD TEMP HIGH", ref: "FIM 29-10-04", symptom: "Reservoir level low", lru: "Hydraulic Transducer", description: "Elevated temperatures logged post-landing.", causes: "1. Heat exchanger blockage\n2. Faulty transducer", isolation: "1. Resistance across J3-A and J3-B: 120 Ohms", action: "Verify heat exchanger airflow. Replace temperature transducer if resistance out of spec.", media: [] },
+            { id: 3, platform: "Gulfstream GV", priority: "Advisory", source: "CMC", ata: "29", code: "GEN 1 ADV", cas: "—", ref: "FIM 24-20-12", symptom: "No physical signs observed", lru: "Generator Control Unit", description: "Intermittent status message triggered during engine start.", causes: "1. Transient fault\n2. Internal GCU logic glitch", isolation: "1. Check GCU Status Light Indicator Pattern", action: "Perform GCU built-in test (BIT). Clear advisory log if BIT passes.", media: [] },
+            { id: 4, platform: "Gulfstream GV", priority: "Caution", source: "MDAU", ata: "36", code: "36112BAC_L", cas: "—", ref: "FIM 36-10-00", symptom: "PRECOOLER OUTLET OVERTEMP", lru: "Precooler Valve", description: "Duct thermal warnings triggered during climb phase.", causes: "1. Sensor calibration drift\n2. Duct leak", isolation: "1. Inspect precooler temperature sensor continuity.", action: "Replace sensor or check bleed air duct.", media: [] },
+            { id: 5, platform: "Gulfstream GV", priority: "Caution", source: "Observed", ata: "36", code: "—", cas: "—", ref: "FIM 36-00-00", symptom: "L BLEED AIR HOT", lru: "Bleed Air Valve", description: "Manual check showed hot bleed air supply line.", causes: "1. Thermal insulation failure\n2. High manifold pressure", isolation: "1. Check bleed manifold pressure readings.", action: "Replace bleed air isolation valve.", media: [] }
+        ];
+
+        let fims = JSON.parse(localStorage.getItem('fim_database')) || initialData;
+        let selectedEntry = null;
+        let tempMediaList = [];
+
+        function normalizePriority(p) {
+            if (!p) return 'N/A';
+            const upper = p.toUpperCase();
+            if (upper === 'RED' || upper === 'CRITICAL' || upper === 'WARNING') return 'Warning';
+            if (upper === 'AMBER' || upper === 'CAUTION') return 'Caution';
+            if (upper === 'CYAN' || upper === 'ADVISORY') return 'Advisory';
+            return p;
+        }
+
+        function getBadgeClass(priority) {
+            const norm = normalizePriority(priority).toLowerCase();
+            if (norm === 'warning') return 'badge-critical';
+            if (norm === 'caution') return 'badge-caution';
+            if (norm === 'advisory') return 'badge-advisory';
+            return 'badge-na';
+        }
+
+        async function fetchFimsFromSupabase() {
+            const { data, error } = await supabaseClient
+                .from('fims')
+                .select('*');
+
+            if (error) {
+                console.error('Error loading data from Supabase:', error);
+            } else if (data && data.length > 0) {
+                fims = data;
+                applyFilters();
+            }
+        }
+
+        function initSidebar() {
+            renderAtaList(ataChapters);
+            populateFormAtaDropdown();
+        }
+
+        function populateFormAtaDropdown() {
+            const ataSelect = document.getElementById('formAta');
+            ataSelect.innerHTML = '<option value="" selected>-- Select Chapter --</option>';
+            ataChapters.forEach(ata => {
+                const num = ata.split(" ")[0];
+                const opt = document.createElement('option');
+                opt.value = num;
+                opt.textContent = ata;
+                ataSelect.appendChild(opt);
+            });
+        }
+
+        function renderAtaList(chaptersToRender) {
+            const box = document.getElementById('ataFilterBox');
+            const currentlyChecked = new Set(
+                Array.from(document.querySelectorAll('#ataFilterBox input[type="checkbox"]:checked')).map(cb => cb.value)
+            );
+
+            box.innerHTML = '';
+            chaptersToRender.forEach(ata => {
+                const num = ata.split(" ")[0];
+                const label = document.createElement('label');
+                label.className = 'filter-item';
+                const isChecked = currentlyChecked.has(num) ? 'checked' : '';
+                label.innerHTML = `<input type="checkbox" value="${num}" ${isChecked} onchange="applyFilters()"> ${ata}`;
+                box.appendChild(label);
+            });
+        }
+
+        function filterAtaList() {
+            const query = document.getElementById('ataSearchInput').value.toLowerCase().trim();
+            const filtered = ataChapters.filter(ata => ata.toLowerCase().includes(query));
+            renderAtaList(filtered);
+        }
+
+        function applyFilters() {
+            const platform = document.getElementById('platformSelect').value;
+            const query = document.getElementById('globalSearch').value.toLowerCase();
+            
+            const checkedAtas = Array.from(document.querySelectorAll('#ataFilterBox input:checked')).map(cb => cb.value);
+            const checkedPrio = Array.from(document.querySelectorAll('.sidebar input[type="checkbox"]:checked'))
+                .map(cb => cb.value)
+                .filter(v => ['Warning', 'Caution', 'Advisory'].includes(v));
+
+            const tbody = document.getElementById('faultTableBody');
+            tbody.innerHTML = '';
+
+            const filtered = fims.filter(item => {
+                const itemPriority = normalizePriority(item.priority || item.severity);
+                const matchPlatform = item.platform === platform;
+                const matchAta = checkedAtas.length === 0 || checkedAtas.some(ataNum => String(item.ata).startsWith(ataNum));
+                const matchPrio = checkedPrio.length === 0 || checkedPrio.includes(itemPriority);
+                const matchSearch = [item.code, item.cas, item.source, item.symptom, item.ata, item.lru, item.ref, item.description, item.causes, item.isolation || item.pinout].some(f => (f || '').toLowerCase().includes(query));
+
+                return matchPlatform && matchAta && matchPrio && matchSearch;
+            });
+
+            filtered.forEach(item => {
+                const tr = document.createElement('tr');
+                if (selectedEntry && selectedEntry.id === item.id) {
+                    tr.classList.add('selected');
+                }
+                tr.onclick = () => selectRow(tr, item);
+
+                const itemPriority = normalizePriority(item.priority || item.severity);
+                const badgeClass = getBadgeClass(itemPriority);
+
+                tr.innerHTML = `
+                    <td><span class="badge ${badgeClass}">${itemPriority}</span></td>
+                    <td>${item.source || '—'}</td>
+                    <td>${item.ata || ''}</td>
+                    <td>${item.code || '—'}</td>
+                    <td>${item.cas || '—'}</td>
+                    <td>${item.symptom || '—'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            if (!filtered.some(e => selectedEntry && e.id === selectedEntry.id)) {
+                clearTaskPanel();
+            }
+        }
+
+        function selectRow(trElement, item) {
+            selectedEntry = item;
+            document.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+            trElement.classList.add('selected');
+
+            document.getElementById('taskAta').innerText = `ATA ${item.ata} - ${item.cas && item.cas !== '—' ? item.cas : item.symptom || 'Fault Entry'}`;
+            document.getElementById('taskTitle').innerText = `Source: ${item.source || 'N/A'} | Fault Code: ${item.code || '—'}`;
+            document.getElementById('taskRef').innerText = item.ref ? `REF: ${item.ref}` : 'REF: N/A';
+            document.getElementById('taskLru').innerText = item.lru || 'N/A';
+            document.getElementById('taskDescription').innerText = item.description || 'No description notes entered.';
+            document.getElementById('taskCauses').innerText = item.causes || 'No possible causes logged.';
+            document.getElementById('taskIsolation').innerText = item.isolation || item.pinout || 'No isolation steps logged.';
+            document.getElementById('taskAction').innerText = item.action || 'Proceed with standard shop manual replacement.';
+            
+            renderTaskMediaGallery(item.media || []);
+            document.getElementById('actionBar').style.display = 'flex';
+        }
+
+        function renderTaskMediaGallery(mediaList) {
+            const container = document.getElementById('taskMediaGallery');
+            container.innerHTML = '';
+
+            if (!mediaList || mediaList.length === 0) {
+                container.innerHTML = '<div style="grid-column: span 2; color: var(--text-muted); font-size: 11px;">No attachments logged.</div>';
+                return;
+            }
+
+            mediaList.forEach(m => {
+                const src = typeof m === 'string' ? m : m.data;
+                const type = m.type || (src.includes('.mp4') ? 'video/mp4' : 'image/jpeg');
+
+                if (type.startsWith('image/')) {
+                    const img = document.createElement('img');
+                    img.src = src;
+                    img.className = 'media-thumb';
+                    img.onclick = () => openLightbox('image', src);
+                    container.appendChild(img);
+                } else if (type.startsWith('video/')) {
+                    const video = document.createElement('video');
+                    video.src = src;
+                    video.className = 'media-thumb';
+                    video.onclick = () => openLightbox('video', src);
+                    container.appendChild(video);
+                }
+            });
+        }
+
+        function clearTaskPanel() {
+            selectedEntry = null;
+            document.getElementById('taskAta').innerText = "Select a Fault";
+            document.getElementById('taskTitle').innerText = "Click any row in the cross-reference grid to load instructions.";
+            document.getElementById('taskRef').innerText = "--";
+            document.getElementById('taskLru').innerText = "--";
+            document.getElementById('taskDescription').innerText = "--";
+            document.getElementById('taskCauses').innerText = "--";
+            document.getElementById('taskIsolation').innerText = "--";
+            document.getElementById('taskAction').innerText = "--";
+            document.getElementById('taskMediaGallery').innerHTML = '<div style="grid-column: span 2; color: var(--text-muted); font-size: 11px;">No attachments logged.</div>';
+            document.getElementById('actionBar').style.display = 'none';
+        }
+
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    tempMediaList.push({
+                        type: file.type,
+                        name: file.name,
+                        data: e.target.result
+                    });
+                    renderModalMediaPreviews();
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function renderModalMediaPreviews() {
+            const container = document.getElementById('mediaPreviewContainer');
+            container.innerHTML = '';
+            tempMediaList.forEach((m, idx) => {
+                const wrapper = document.createElement('div');
+                wrapper.style.position = 'relative';
+
+                let el;
+                const src = typeof m === 'string' ? m : m.data;
+                const type = m.type || (src.includes('.mp4') ? 'video/mp4' : 'image/jpeg');
+
+                if (type.startsWith('image/')) {
+                    el = document.createElement('img');
+                    el.src = src;
+                } else {
+                    el = document.createElement('video');
+                    el.src = src;
+                }
+                el.style.width = '50px';
+                el.style.height = '50px';
+                el.style.objectFit = 'cover';
+                el.style.borderRadius = '4px';
+
+                const removeBtn = document.createElement('button');
+                removeBtn.innerText = '×';
+                removeBtn.style.cssText = 'position:absolute; top:-4px; right:-4px; background:#dc2626; color:#fff; border:none; border-radius:50%; width:16px; height:16px; font-size:10px; cursor:pointer; display:flex; align-items:center; justify-content:center;';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    tempMediaList.splice(idx, 1);
+                    renderModalMediaPreviews();
+                };
+
+                wrapper.appendChild(el);
+                wrapper.appendChild(removeBtn);
+                container.appendChild(wrapper);
+            });
+        }
+
+        function openAddModal() {
+            document.getElementById('modalHeading').innerText = "Add New Fault Entry";
+            document.getElementById('editEntryId').value = "";
+            document.getElementById('formPlatform').value = document.getElementById('platformSelect').value;
+            document.getElementById('formPriority').value = "";
+            document.getElementById('formSource').value = "CAS";
+            document.getElementById('formAta').value = "";
+            document.getElementById('formCode').value = "";
+            document.getElementById('formCas').value = "";
+            document.getElementById('formRef').value = "";
+            document.getElementById('formSymptom').value = "";
+            document.getElementById('formLru').value = "";
+            document.getElementById('formDescription').value = "";
+            document.getElementById('formCauses').value = "";
+            document.getElementById('formIsolation').value = "";
+            document.getElementById('formAction').value = "";
+            tempMediaList = [];
+            renderModalMediaPreviews();
+            document.getElementById('entryModal').style.display = 'flex';
+        }
+
+        function openEditModal() {
+            if (!selectedEntry) return;
+            document.getElementById('modalHeading').innerText = "Edit Fault Entry";
+            document.getElementById('editEntryId').value = selectedEntry.id;
+            document.getElementById('formPlatform').value = selectedEntry.platform;
+            document.getElementById('formPriority').value = normalizePriority(selectedEntry.priority || selectedEntry.severity);
+            document.getElementById('formSource').value = selectedEntry.source || "";
+            
+            const ataNum = selectedEntry.ata ? String(selectedEntry.ata).split('-')[0] : "";
+            document.getElementById('formAta').value = ataNum;
+
+            document.getElementById('formCode').value = selectedEntry.code || "";
+            document.getElementById('formCas').value = selectedEntry.cas || "";
+            document.getElementById('formRef').value = selectedEntry.ref || "";
+            document.getElementById('formSymptom').value = selectedEntry.symptom || "";
+            document.getElementById('formLru').value = selectedEntry.lru || "";
+            document.getElementById('formDescription').value = selectedEntry.description || "";
+            document.getElementById('formCauses').value = selectedEntry.causes || "";
+            document.getElementById('formIsolation').value = selectedEntry.isolation || selectedEntry.pinout || "";
+            document.getElementById('formAction').value = selectedEntry.action || "";
+            
+            tempMediaList = selectedEntry.media ? [...selectedEntry.media] : [];
+            renderModalMediaPreviews();
+            document.getElementById('entryModal').style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('entryModal').style.display = 'none'; }
+
+        async function saveEntry() {
+            const editId = document.getElementById('editEntryId').value;
+            
+            const entryData = {
+                id: editId ? Number(editId) : Date.now(),
+                platform: document.getElementById('formPlatform').value,
+                priority: document.getElementById('formPriority').value,
+                source: document.getElementById('formSource').value,
+                ata: document.getElementById('formAta').value,
+                code: document.getElementById('formCode').value || "—",
+                cas: document.getElementById('formCas').value || "—",
+                ref: document.getElementById('formRef').value,
+                symptom: document.getElementById('formSymptom').value || "—",
+                lru: document.getElementById('formLru').value,
+                description: document.getElementById('formDescription').value,
+                causes: document.getElementById('formCauses').value,
+                isolation: document.getElementById('formIsolation').value,
+                action: document.getElementById('formAction').value,
+                media: tempMediaList
+            };
+
+            if (editId) {
+                const index = fims.findIndex(item => item.id === Number(editId));
+                if (index !== -1) {
+                    fims[index] = entryData;
+                    selectedEntry = entryData;
+                }
+            } else {
+                fims.push(entryData);
+            }
+
+            try {
+                localStorage.setItem('fim_database', JSON.stringify(fims));
+            } catch (e) {
+                console.warn("LocalStorage full, proceeding with remote save.");
+            }
+
+            closeModal();
+            applyFilters();
+
+            if (editId && selectedEntry) {
+                selectRow(document.querySelector(`tr.selected`) || document.createElement('tr'), selectedEntry);
+            }
+        }
+
+        function deleteEntry() {
+            if (!selectedEntry) return;
+            if (confirm(`Are you sure you want to delete ${selectedEntry.code} (${selectedEntry.cas})?`)) {
+                fims = fims.filter(item => item.id !== selectedEntry.id);
+                localStorage.setItem('fim_database', JSON.stringify(fims));
+                clearTaskPanel();
+                applyFilters();
+            }
+        }
+
+        function openLightbox(type, src) {
+            const container = document.getElementById('lightboxContainer');
+            container.innerHTML = '';
+
+            if (type === 'image') {
+                const img = document.createElement('img');
+                img.src = src;
+                img.className = 'lightbox-content';
+                container.appendChild(img);
+            } else if (type === 'video') {
+                const video = document.createElement('video');
+                video.src = src;
+                video.controls = true;
+                video.autoplay = true;
+                video.className = 'lightbox-content';
+                container.appendChild(video);
+            }
+            document.getElementById('lightboxModal').style.display = 'flex';
+        }
+
+        function closeLightbox() {
+            document.getElementById('lightboxModal').style.display = 'none';
+            document.getElementById('lightboxContainer').innerHTML = '';
+        }
+
+        // Initialize application and pull remote Supabase data
+        initSidebar();
+        applyFilters();
+        fetchFimsFromSupabase();
+    </script>
+</body>
+</html>
