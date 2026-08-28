@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fault Isolation Manual (FIM)</title>
+    <title>HangarHero - Fault Isolation Matrix</title>
     
     <!-- Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -424,7 +424,7 @@
 <body>
     <header>
         <div style="display: flex; align-items: center; gap: 12px;">
-            <span class="header-title">HangarHeroHub</span>
+            <span class="header-title">HangarHero</span>
             <select id="platformSelect" class="platform-select" onchange="applyFilters()">
                 <option value="Gulfstream GIII">Gulfstream GIII</option>
                 <option value="Gulfstream GIV">Gulfstream GIV</option>
@@ -472,7 +472,7 @@
         </div>
 
         <div class="main-content">
-            <div class="grid-header">FAULT & SYMPTOMS TROUBLESHOOITNG LOG</div>
+            <div class="grid-header">FAULT ISOLATION MATRIX</div>
             <div class="table-container">
                 <table>
                     <thead>
@@ -652,7 +652,7 @@
         <div id="lightboxContainer"></div>
     </div>
 
-    <!-- Main Logic Script -->
+    <!-- Main Logic Script (100% Supabase Driven) -->
     <script>
         const ataChapters = [
             "21 Air Conditioning", "22 Auto Flight", "23 Communications", 
@@ -663,15 +663,7 @@
             "49 Auxiliary Power Unit", "52 Doors", "71 Power Plant", "73 Engine Fuel & Control"
         ];
 
-        let initialData = [
-            { id: 1, platform: "Gulfstream GV", priority: "Warning", source: "CAS", ata: "29", code: "—", cas: "HYD PRESS LOW", ref: "FIM 29-10-01", symptom: "Whining noise from tail section", lru: "Hydraulic Pump 1", description: "Audible whining noticed on ground run prior to flight. Pressure gauge fluctuation observed.", causes: "1. Low fluid level\n2. Relay failure", isolation: "1. Pin A1 to GND: 28 VDC (Ref: J2)\n2. Pin B2 Continuity: < 0.5 Ohms", action: "Inspect fluid level. If nominal, replace Hydraulic Pump Relay P/N 4092-A2.", media: [] },
-            { id: 2, platform: "Gulfstream GV", priority: "Caution", source: "CAS", ata: "29", code: "—", cas: "HYD TEMP HIGH", ref: "FIM 29-10-04", symptom: "Reservoir level low", lru: "Hydraulic Transducer", description: "Elevated temperatures logged post-landing.", causes: "1. Heat exchanger blockage\n2. Faulty transducer", isolation: "1. Resistance across J3-A and J3-B: 120 Ohms", action: "Verify heat exchanger airflow. Replace temperature transducer if resistance out of spec.", media: [] },
-            { id: 3, platform: "Gulfstream GV", priority: "Advisory", source: "CMC", ata: "29", code: "GEN 1 ADV", cas: "—", ref: "FIM 24-20-12", symptom: "No physical signs observed", lru: "Generator Control Unit", description: "Intermittent status message triggered during engine start.", causes: "1. Transient fault\n2. Internal GCU logic glitch", isolation: "1. Check GCU Status Light Indicator Pattern", action: "Perform GCU built-in test (BIT). Clear advisory log if BIT passes.", media: [] },
-            { id: 4, platform: "Gulfstream GV", priority: "Caution", source: "MDAU", ata: "36", code: "36112BAC_L", cas: "—", ref: "FIM 36-10-00", symptom: "PRECOOLER OUTLET OVERTEMP", lru: "Precooler Valve", description: "Duct thermal warnings triggered during climb phase.", causes: "1. Sensor calibration drift\n2. Duct leak", isolation: "1. Inspect precooler temperature sensor continuity.", action: "Replace sensor or check bleed air duct.", media: [] },
-            { id: 5, platform: "Gulfstream GV", priority: "Caution", source: "Observed", ata: "36", code: "—", cas: "—", ref: "FIM 36-00-00", symptom: "L BLEED AIR HOT", lru: "Bleed Air Valve", description: "Manual check showed hot bleed air supply line.", causes: "1. Thermal insulation failure\n2. High manifold pressure", isolation: "1. Check bleed manifold pressure readings.", action: "Replace bleed air isolation valve.", media: [] }
-        ];
-
-        let fims = JSON.parse(localStorage.getItem('fim_database')) || initialData;
+        let fims = [];
         let selectedEntry = null;
         let tempMediaList = [];
 
@@ -695,12 +687,13 @@
         async function fetchFimsFromSupabase() {
             const { data, error } = await supabaseClient
                 .from('fims')
-                .select('*');
+                .select('*')
+                .order('id', { ascending: false });
 
             if (error) {
                 console.error('Error loading data from Supabase:', error);
-            } else if (data && data.length > 0) {
-                fims = data;
+            } else {
+                fims = data || [];
                 applyFilters();
             }
         }
@@ -821,7 +814,7 @@
             }
 
             mediaList.forEach(m => {
-                const src = typeof m === 'string' ? m : m.data;
+                const src = typeof m === 'string' ? m : (m.data || m.url);
                 const type = m.type || (src.includes('.mp4') ? 'video/mp4' : 'image/jpeg');
 
                 if (type.startsWith('image/')) {
@@ -857,17 +850,14 @@
         function handleFileSelect(event) {
             const files = Array.from(event.target.files);
             files.forEach(file => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    tempMediaList.push({
-                        type: file.type,
-                        name: file.name,
-                        data: e.target.result
-                    });
-                    renderModalMediaPreviews();
-                };
-                reader.readAsDataURL(file);
+                tempMediaList.push({
+                    file: file,
+                    name: file.name,
+                    type: file.type,
+                    data: URL.createObjectURL(file)
+                });
             });
+            renderModalMediaPreviews();
         }
 
         function renderModalMediaPreviews() {
@@ -878,8 +868,8 @@
                 wrapper.style.position = 'relative';
 
                 let el;
-                const src = typeof m === 'string' ? m : m.data;
-                const type = m.type || (src.includes('.mp4') ? 'video/mp4' : 'image/jpeg');
+                const src = m.data || m.url || m;
+                const type = m.type || (typeof src === 'string' && src.includes('.mp4') ? 'video/mp4' : 'image/jpeg');
 
                 if (type.startsWith('image/')) {
                     el = document.createElement('img');
@@ -957,11 +947,47 @@
 
         function closeModal() { document.getElementById('entryModal').style.display = 'none'; }
 
+        async function uploadMediaFiles() {
+            const uploadedMedia = [];
+
+            for (const item of tempMediaList) {
+                if (item.file) {
+                    const fileExt = item.name.split('.').pop();
+                    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                    const filePath = `uploads/${fileName}`;
+
+                    const { data, error } = await supabaseClient
+                        .storage
+                        .from('fim-media')
+                        .upload(filePath, item.file);
+
+                    if (error) {
+                        console.error('File Upload Error:', error);
+                        continue;
+                    }
+
+                    const { data: publicUrlData } = supabaseClient
+                        .storage
+                        .from('fim-media')
+                        .getPublicUrl(filePath);
+
+                    uploadedMedia.push({
+                        type: item.type,
+                        name: item.name,
+                        data: publicUrlData.publicUrl
+                    });
+                } else {
+                    uploadedMedia.push(item);
+                }
+            }
+            return uploadedMedia;
+        }
+
         async function saveEntry() {
             const editId = document.getElementById('editEntryId').value;
+            const mediaUrls = await uploadMediaFiles();
             
-            const entryData = {
-                id: editId ? Number(editId) : Date.now(),
+            const entryPayload = {
                 platform: document.getElementById('formPlatform').value,
                 priority: document.getElementById('formPriority').value,
                 source: document.getElementById('formSource').value,
@@ -975,40 +1001,56 @@
                 causes: document.getElementById('formCauses').value,
                 isolation: document.getElementById('formIsolation').value,
                 action: document.getElementById('formAction').value,
-                media: tempMediaList
+                media: mediaUrls
             };
 
+            let response;
+
             if (editId) {
-                const index = fims.findIndex(item => item.id === Number(editId));
-                if (index !== -1) {
-                    fims[index] = entryData;
-                    selectedEntry = entryData;
-                }
+                response = await supabaseClient
+                    .from('fims')
+                    .update(entryPayload)
+                    .eq('id', Number(editId))
+                    .select();
             } else {
-                fims.push(entryData);
+                response = await supabaseClient
+                    .from('fims')
+                    .insert([entryPayload])
+                    .select();
             }
 
-            try {
-                localStorage.setItem('fim_database', JSON.stringify(fims));
-            } catch (e) {
-                console.warn("LocalStorage full, proceeding with remote save.");
+            if (response.error) {
+                alert('Error saving record: ' + response.error.message);
+                console.error(response.error);
+                return;
             }
 
             closeModal();
-            applyFilters();
+            await fetchFimsFromSupabase();
 
-            if (editId && selectedEntry) {
+            if (editId && response.data && response.data[0]) {
+                selectedEntry = response.data[0];
                 selectRow(document.querySelector(`tr.selected`) || document.createElement('tr'), selectedEntry);
             }
         }
 
-        function deleteEntry() {
+        async function deleteEntry() {
             if (!selectedEntry) return;
+            
             if (confirm(`Are you sure you want to delete ${selectedEntry.code} (${selectedEntry.cas})?`)) {
-                fims = fims.filter(item => item.id !== selectedEntry.id);
-                localStorage.setItem('fim_database', JSON.stringify(fims));
+                const { error } = await supabaseClient
+                    .from('fims')
+                    .delete()
+                    .eq('id', selectedEntry.id);
+
+                if (error) {
+                    alert('Error deleting record: ' + error.message);
+                    console.error(error);
+                    return;
+                }
+
                 clearTaskPanel();
-                applyFilters();
+                await fetchFimsFromSupabase();
             }
         }
 
@@ -1037,9 +1079,8 @@
             document.getElementById('lightboxContainer').innerHTML = '';
         }
 
-        // Initialize application and pull remote Supabase data
+        // Initialize application and fetch live data directly from Supabase
         initSidebar();
-        applyFilters();
         fetchFimsFromSupabase();
     </script>
 </body>
